@@ -91,7 +91,19 @@ async function sync() {
     await applyServerData(res.data);
 
     await DB.setMeta('lastSync', nowIso());
-    setStatus('最終同期 ' + new Date().toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+
+    // サーバーが「他の端末による、より新しい更新がある」と判断してこちらの変更を
+    // 棄却した場合、何も表示しないと編集内容が静かに消えたように見えてしまう。
+    // 該当した品目名を拾ってステータス行で知らせる（値自体はサーバー側の最新のものに揃う）。
+    const rejectedIds = (res.items?.applied || [])
+      .filter(a => a.result === 'rejected-stale')
+      .map(a => a.id);
+    if (rejectedIds.length) {
+      const names = rejectedIds.map(id => state.items.find(i => i.id === id)?.name || id);
+      setStatus(`他の端末での更新が新しいため反映されませんでした: ${names.join('、')}`, true);
+    } else {
+      setStatus('最終同期 ' + new Date().toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }));
+    }
   } catch (e) {
     setStatus('同期できませんでした: ' + e.message, true);
   } finally {

@@ -155,6 +155,29 @@ async function saveItem(item, { immediateSync = true } = {}) {
   if (immediateSync) sync();
 }
 
+/**
+ * 全品目に対して applyAutoListRules を再適用し、買い物リストの出し入れをまとめて反映する。
+ * スプレッドシート側で目標在庫数だけ後から入力した場合など、
+ * 個別の在庫増減や保存を経由しない変更を拾うための手動トリガー。
+ */
+async function runAutoListCheck() {
+  const targets = state.items.filter(i => !i.deleted);
+  let changed = 0;
+
+  for (const item of targets) {
+    const next = applyAutoListRules(item);
+    if (next.onList !== item.onList) {
+      changed++;
+      await saveItem(next, { immediateSync: false });
+    }
+  }
+
+  render();
+  updateBadge();
+  setStatus(changed ? `目標在庫チェック: ${changed}件をリストに反映しました` : '目標在庫チェック: 変更はありませんでした');
+  if (changed) sync();
+}
+
 async function addLog(log) {
   log.key = logKey(log.itemId, log.at);
   state.logs.push(log);
@@ -563,6 +586,7 @@ function bindUI() {
   });
 
   $('#btnSync').onclick = () => sync();
+  $('#btnAutoCheck').onclick = () => runAutoListCheck();
   $('#btnSettings').onclick = () => openSettings();
   $('#btnAdd').onclick = () => openItemDialog(null);
 

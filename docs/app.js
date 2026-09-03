@@ -10,11 +10,14 @@ const state = {
   storeFilter: null,     // null = すべて
   apiUrl: '',
   apiKey: '',
-  syncing: false
+  syncing: false,
+  ready: false,          // 起動後、最初の同期が完了したか（古いキャッシュのまま編集させないためのガード）
+  clockOffsetMs: 0        // サーバー時刻 - この端末の時計、のズレ。複数端末間の時計のズレによる
+                           // Last-Write-Winsの誤判定（新しい編集が古いと誤認されて棄却される）を防ぐための補正値
 };
 
 const $ = sel => document.querySelector(sel);
-const nowIso = () => new Date().toISOString();
+const nowIso = () => new Date(Date.now() + state.clockOffsetMs).toISOString();
 const newId = () => 'itm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
 const fmtNum = n => (Math.round(n * 10) / 10).toString();
 
@@ -41,8 +44,13 @@ async function init() {
   if (!state.apiUrl) {
     setStatus('GASのURLが未設定です。右上の⚙から設定してください。', true);
     openSettings();
+    state.ready = true;
   } else {
-    sync();
+    // 起動直後の同期が終わるまで待ってから編集を許可する。
+    // 待たずに編集できてしまうと、まだ他の端末の最新の変更を取得していない
+    // 古いキャッシュを元に保存してしまい、その変更を巻き戻すことがある。
+    await sync();
+    state.ready = true;
   }
 
   window.addEventListener('online', () => sync());
@@ -96,6 +104,13 @@ async function sync() {
 
 /** サーバから返った全件を Last-Write-Wins でローカルへ反映 */
 async function applyServerData(data) {
+  // この端末の時計とサーバー時刻のズレを都度更新しておく。
+  // 次にこの端末で保存するときの updatedAt はこのズレを補正した値になるため、
+  // 端末間で時計がずれていても、本当に後から行った編集が正しく「新しい」と判定されるようになる。
+  if (data.serverTime) {
+    state.clockOffsetMs = new Date(data.serverTime).getTime() - Date.now();
+  }
+
   const localById = new Map(state.items.map(i => [i.id, i]));
   const merged = data.items.map(srv => {
     const loc = localById.get(srv.id);
@@ -161,6 +176,7 @@ async function saveItem(item, { immediateSync = true } = {}) {
  * 個別の在庫増減や保存を経由しない変更を拾うための手動トリガー。
  */
 async function runAutoListCheck() {
+  if (!requireReady()) return;
   const targets = state.items.filter(i => !i.deleted);
   let changed = 0;
 
@@ -212,11 +228,13 @@ function applyAutoListRules(item) {
 
 /** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り。目標在庫数以下になった場合も自動でリスト入り。 */
 async function changeStock(item, delta) {
+  if (!requireReady()) return;
   const next = applyAutoListRules({ ...item, stock: Math.max(0, item.stock + delta) });
   await saveItem(next);
 }
 
 async function toggleList(item) {
+  if (!requireReady()) return;
   const next = { ...item, onList: !item.onList };
   if (!next.onList && next.urgency === '必須' && next.stock > 0) next.urgency = '通常';
   await saveItem(next);
@@ -476,11 +494,23 @@ function setStatus(text, isError = false) {
   el.classList.toggle('err', isError);
 }
 
+/**
+ * 起動直後の同期が終わる前に編集操作をさせない。
+ * ここでブロックしないと、他の端末での最新の変更をまだ取得していない
+ * 古いキャッシュを元に保存してしまい、その変更を巻き戻してしまうことがある。
+ */
+function requireReady() {
+  if (state.ready) return true;
+  setStatus('起動直後の同期が完了するまでお待ちください…', true);
+  return false;
+}
+
 // ---------------------------------------------------------------- ダイアログ
 
 let editingItem = null;
 
 function openItemDialog(item) {
+  if (!requireReady()) return;
   editingItem = item || null;
   const dlg = $('#itemDialog');
   // form.name はフォーム自身のname属性を指すため、必ず elements 経由で取る
@@ -551,6 +581,7 @@ function readItemForm() {
 let buyingItem = null;
 
 function openBuyDialog(item) {
+  if (!requireReady()) return;
   buyingItem = item;
   const f = $('#buyForm').elements;
   $('#buyTitle').textContent = item.name + ' を購入済みにする';

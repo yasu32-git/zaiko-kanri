@@ -59,6 +59,11 @@
       <label>単位<input name="unit" placeholder="個 / パック" autocomplete="off"></label>
     </div>
 
+    <div class="row">
+      <label>目標在庫数（維持したい数）<input name="targetStock" type="number" inputmode="decimal" step="0.5" min="0" placeholder="任意"></label>
+      <label>購入時の数量（デフォルト）<input name="defaultQty" type="number" inputmode="decimal" step="0.5" min="0" placeholder="例: 18"></label>
+    </div>
+
     <label>緊急度
       <select name="urgency">
         <option value="通常">通常</option>

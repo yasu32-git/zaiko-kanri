@@ -87,13 +87,11 @@ body {
 
 .chips {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
   margin-top: 8px;
   padding-bottom: 2px;
-  scrollbar-width: none;
 }
-.chips::-webkit-scrollbar { display: none; }
 .chip {
   flex: 0 0 auto;
   padding: 6px 12px;
@@ -139,18 +137,20 @@ main { padding: 10px 12px; }
 .tag { background: var(--accent-weak); color: var(--accent); border-radius: 4px; padding: 1px 5px; }
 .tag.due { background: transparent; color: var(--warn); border: 1px solid var(--warn); }
 .tag.pace { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+.tag.target { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
 
-.stepper { display: flex; align-items: center; gap: 2px; }
+.stepper { display: flex; align-items: center; gap: 4px; }
 .stepper button {
-  width: 30px; height: 30px;
-  border-radius: 8px;
+  width: 44px; height: 44px;
+  border-radius: 10px;
   border: 1px solid var(--line);
   background: var(--bg);
   color: var(--text);
-  font-size: 16px;
+  font-size: 22px;
   line-height: 1;
 }
-.stepper .val { min-width: 30px; text-align: center; font-size: 14px; font-weight: 700; }
+.stepper button:active { background: var(--accent-weak); border-color: var(--accent); }
+.stepper .val { min-width: 34px; text-align: center; font-size: 15px; font-weight: 700; }
 
 .act {
   border: none;

@@ -344,6 +344,10 @@ function cardShell(item) {
   sub.className = 'card-sub';
   (item.stores || []).forEach(s => sub.appendChild(tag(s)));
 
+  if (item.targetStock != null) {
+    sub.appendChild(tag(`目標${fmtNum(item.targetStock)}${item.unit || ''}`, 'target'));
+  }
+
   const due = dueLabel(item);
   if (due) sub.appendChild(tag(due, 'due'));
 
@@ -436,6 +440,8 @@ function openItemDialog(item) {
   f.category.value = item?.category || '';
   f.stock.value = item ? item.stock : 0;
   f.unit.value = item?.unit || '';
+  f.targetStock.value = item?.targetStock ?? '';
+  f.defaultQty.value = item?.defaultQty ?? '';
   f.urgency.value = item?.urgency || '通常';
   f.dueDate.value = item?.dueDate || '';
   f.memo.value = item?.memo || '';
@@ -479,6 +485,8 @@ function readItemForm() {
     stores: [...new Set([...checked, ...extra])],
     stock: Number(f.stock.value) || 0,
     unit: f.unit.value.trim(),
+    targetStock: f.targetStock.value === '' ? null : Number(f.targetStock.value),
+    defaultQty: f.defaultQty.value === '' ? null : Number(f.defaultQty.value),
     urgency: f.urgency.value,
     onList: editingItem?.onList || false,
     dueDate: f.dueDate.value || '',
@@ -493,7 +501,7 @@ function openBuyDialog(item) {
   buyingItem = item;
   const f = $('#buyForm').elements;
   $('#buyTitle').textContent = item.name + ' を購入済みにする';
-  f.qty.value = 1;
+  f.qty.value = item.defaultQty ?? 1;
 
   const sel = f.store;
   sel.innerHTML = '';

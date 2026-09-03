@@ -16,7 +16,7 @@ var SHEET_LOG = '購入履歴';
 var SHEET_STORES = '購入先マスタ';
 
 var ITEM_HEADERS = [
-  'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位',
+  'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位', '目標在庫数', '購入単位数',
   '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除'
 ];
 var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫'];
@@ -92,6 +92,8 @@ function readItems() {
       stores: splitStores(r['購入先']),
       stock: numOrZero(r['在庫数']),
       unit: String(r['単位'] || ''),
+      targetStock: emptyToNull(r['目標在庫数']),
+      defaultQty: emptyToNull(r['購入単位数']),
       urgency: String(r['緊急度'] || '通常'),
       onList: toBool(r['買い物リスト']),
       dueDate: toDateStr(r['購入期日']),
@@ -200,6 +202,8 @@ function itemToRow(it, header) {
     '購入先': (it.stores || []).join(','),
     '在庫数': numOrZero(it.stock),
     '単位': it.unit || '',
+    '目標在庫数': (it.targetStock === null || it.targetStock === undefined || it.targetStock === '') ? '' : Number(it.targetStock),
+    '購入単位数': (it.defaultQty === null || it.defaultQty === undefined || it.defaultQty === '') ? '' : Number(it.defaultQty),
     '緊急度': it.urgency || '通常',
     '買い物リスト': it.onList ? true : false,
     '購入期日': it.dueDate || '',
@@ -246,6 +250,10 @@ function setupSheets() {
   ensureSheet(SHEET_LOG, LOG_HEADERS);
   var stores = ensureSheet(SHEET_STORES, STORE_HEADERS);
 
+  // 既存シートにコードが期待する列が無い場合、末尾に追加する（データは保持したまま）。
+  // main.gs を更新した後にもう一度 setupSheets を実行すれば、この移行が自動で走る。
+  ensureColumns(SHEET_ITEMS, ITEM_HEADERS);
+
   if (stores.getLastRow() < 2) {
     stores.getRange(2, 1, 4, 2).setValues([
       ['コストコ', 1],
@@ -259,9 +267,9 @@ function setupSheets() {
   if (items.getLastRow() < 2) {
     var now = new Date().toISOString();
     items.getRange(2, 1, 3, ITEM_HEADERS.length).setValues([
-      [newId(), '牛乳', '食材', 'コストコ,業務スーパー', 3, 'パック', '通常', false, '', '', now, false],
-      [newId(), 'トイレットペーパー', '日用品', 'コストコ', 0, 'パック', '必須', true, '', '', now, false],
-      [newId(), 'セロテープ', '日用品', 'ダイソー', 1, '個', '通常', false, '2026-09-30', '急ぎではない', now, false]
+      [newId(), '牛乳', '食材', 'コストコ,業務スーパー', 3, 'パック', 4, 2, '通常', false, '', '', now, false],
+      [newId(), 'トイレットペーパー', '日用品', 'コストコ', 0, 'パック', 12, 18, '必須', true, '', '', now, false],
+      [newId(), 'セロテープ', '日用品', 'ダイソー', 1, '個', '', '', '通常', false, '2026-09-30', '急ぎではない', now, false]
     ]);
   }
 
@@ -283,6 +291,19 @@ function ensureSheet(name, headers) {
     sh.setFrozenRows(1);
   }
   return sh;
+}
+
+/** 既存シートのヘッダ行に無い列を末尾に追加する。データ列の並びには依存しないコードなので、追加位置は末尾で問題ない。 */
+function ensureColumns(sheetName, headers) {
+  var sh = ss().getSheetByName(sheetName);
+  if (!sh || sh.getLastRow() === 0) return [];
+  var lastCol = sh.getLastColumn();
+  var current = sh.getRange(1, 1, 1, lastCol).getValues()[0].map(function (h) { return String(h).trim(); });
+  var missing = headers.filter(function (h) { return current.indexOf(h) === -1; });
+  if (missing.length) {
+    sh.getRange(1, lastCol + 1, 1, missing.length).setValues([missing]).setFontWeight('bold');
+  }
+  return missing;
 }
 
 /**
@@ -338,6 +359,13 @@ function splitStores(v) {
 function numOrZero(v) {
   var n = Number(v);
   return isNaN(n) ? 0 : n;
+}
+
+/** 空セルは null（未設定）として扱う。0とは区別する。 */
+function emptyToNull(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  var n = Number(v);
+  return isNaN(n) ? null : n;
 }
 
 function toBool(v) {

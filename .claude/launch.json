@@ -4,7 +4,7 @@
     {
       "name": "stock-pwa",
       "runtimeExecutable": "python3",
-      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "app"],
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "docs"],
       "port": 8765
     }
   ]

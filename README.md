@@ -10,7 +10,7 @@ DBは夫のGoogle Drive上のスプレッドシート、APIはGoogle Apps Script
 ├── README.md          ← このファイル（要件・設計・セットアップ手順）
 ├── gas/
 │   └── main.gs        ← GASにコピーするAPIコード
-└── app/               ← PWA本体（このフォルダごと静的ホスティングに置く）
+└── docs/              ← PWA本体（GitHub Pagesの公開元フォルダ。/docs 以外は選べない場合が多いためこの名前）
     ├── index.html
     ├── style.css
     ├── app.js         ← UI・同期ロジック
@@ -92,9 +92,9 @@ DBは夫のGoogle Drive上のスプレッドシート、APIはGoogle Apps Script
 ### Step 2: PWAのデプロイ（GitHub Pages の例）
 
 1. GitHubに新規リポジトリを作成（Public）。
-2. `app/` の中身をリポジトリ直下に置いて push。
-3. リポジトリの Settings → Pages → Branch: `main` / `(root)` で公開。
-4. 発行されたURLをiPhoneのSafariで開く。
+2. このリポジトリ（`docs/` にPWA本体が入った状態）をそのまま push。
+3. リポジトリの Settings → Pages → Branch: `main` / `/docs` で公開。
+4. 発行されたURL（`https://<ユーザー名>.github.io/<リポジトリ名>/`）をiPhoneのSafariで開く。
 
 ### Step 3: 初期設定とホーム画面追加
 
@@ -107,10 +107,10 @@ DBは夫のGoogle Drive上のスプレッドシート、APIはGoogle Apps Script
 
 ## ローカルで動作確認する
 
-Macで見た目や動作を確認したいときは、`app/` を静的サーバで配信します。
+Macで見た目や動作を確認したいときは、`docs/` を静的サーバで配信します。
 
 ```bash
-python3 -m http.server 8765 --directory app
+python3 -m http.server 8765 --directory docs
 ```
 
 ブラウザで `http://localhost:8765` を開きます（`file://` で開くとService WorkerとES Modulesが動きません）。
@@ -153,8 +153,8 @@ Service Workerはネットワーク優先（取得できたらキャッシュを
 
 ### 残っているステップ（ユーザー作業）
 
-1. **スプレッドシート作成とGASデプロイ** — 上記「Step 1」の手順。ここだけは夫のGoogleアカウントでの操作が必要。
-2. **ホスティング** — `app/` をGitHub Pages等に公開（上記「Step 2」）。
+1. **スプレッドシート作成とGASデプロイ** — 上記「Step 1」の手順。ここだけは夫のGoogleアカウントでの操作が必要。完了済み。
+2. **ホスティング** — `docs/` をGitHub Pagesに公開（上記「Step 2」）。完了済み: https://yasu32-git.github.io/zaiko-kanri/
 3. **実機での確認** — iPhoneのSafariで開き、設定にウェブアプリURLを入れて同期を確認 → ホーム画面に追加。妻のiPhoneでも同様に。
 4. **マスタの実データ投入** — 購入先マスタに実際に使う店舗名を入れ、品目を登録。シートに直接行を追加した場合は、スプレッドシートのメニュー「在庫管理 → 空のID/更新日時を埋める」を実行する。
 

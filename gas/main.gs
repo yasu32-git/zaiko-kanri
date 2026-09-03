@@ -175,7 +175,7 @@ function upsertItems(items) {
     var rowIdx = rowOfId[it.id];
 
     if (rowIdx === undefined) {
-      sh.appendRow(itemToRow(it, header));
+      sh.appendRow(itemToRow(it, header, null));
       applied.push({ id: it.id, result: 'inserted' });
       return;
     }
@@ -186,7 +186,7 @@ function upsertItems(items) {
       applied.push({ id: it.id, result: 'rejected-stale' });
       return;
     }
-    var row = itemToRow(it, header);
+    var row = itemToRow(it, header, values[rowIdx]);
     sh.getRange(rowIdx + 1, 1, 1, header.length).setValues([row]);
     applied.push({ id: it.id, result: 'updated' });
   });
@@ -194,24 +194,41 @@ function upsertItems(items) {
   return { applied: applied };
 }
 
-function itemToRow(it, header) {
-  var map = {
-    'id': it.id,
-    '品名': it.name || '',
-    'カテゴリ': it.category || '',
-    '購入先': (it.stores || []).join(','),
-    '在庫数': numOrZero(it.stock),
-    '単位': it.unit || '',
-    '目標在庫数': (it.targetStock === null || it.targetStock === undefined || it.targetStock === '') ? '' : Number(it.targetStock),
-    '購入単位数': (it.defaultQty === null || it.defaultQty === undefined || it.defaultQty === '') ? '' : Number(it.defaultQty),
-    '緊急度': it.urgency || '通常',
-    '買い物リスト': it.onList ? true : false,
-    '購入期日': it.dueDate || '',
-    'メモ': it.memo || '',
-    '更新日時': it.updatedAt || new Date().toISOString(),
-    '削除': it.deleted ? true : false
-  };
-  return header.map(function (h) { return map.hasOwnProperty(h) ? map[h] : ''; });
+/**
+ * クライアントから届いた品目データをシートの1行分の配列に変換する。
+ *
+ * 更新（existingRow が渡された）場合は、既存の行の値を土台にして、
+ * it に実際に存在するフィールドだけを上書きする。it に無いフィールド（undefined）は
+ * 既存値をそのまま残すため、キャッシュの古いクライアントや通信の欠落で
+ * 一部フィールドが送られてこなくても、シート側のデータが消えることはない。
+ * 新規追加（existingRow が null）の場合は、無いフィールドは空欄で作る。
+ */
+function itemToRow(it, header, existingRow) {
+  var colOf = {};
+  header.forEach(function (h, i) { colOf[h] = i; });
+  var out = existingRow ? existingRow.slice() : header.map(function () { return ''; });
+
+  function set(key, value) {
+    if (colOf.hasOwnProperty(key)) out[colOf[key]] = value;
+  }
+  function has(field) { return it[field] !== undefined; }
+
+  if (has('id')) set('id', it.id);
+  if (has('name')) set('品名', it.name || '');
+  if (has('category')) set('カテゴリ', it.category || '');
+  if (has('stores')) set('購入先', (it.stores || []).join(','));
+  if (has('stock')) set('在庫数', numOrZero(it.stock));
+  if (has('unit')) set('単位', it.unit || '');
+  if (has('targetStock')) set('目標在庫数', (it.targetStock === null || it.targetStock === '') ? '' : Number(it.targetStock));
+  if (has('defaultQty')) set('購入単位数', (it.defaultQty === null || it.defaultQty === '') ? '' : Number(it.defaultQty));
+  if (has('urgency')) set('緊急度', it.urgency || '通常');
+  if (has('onList')) set('買い物リスト', it.onList ? true : false);
+  if (has('dueDate')) set('購入期日', it.dueDate || '');
+  if (has('memo')) set('メモ', it.memo || '');
+  set('更新日時', it.updatedAt || new Date().toISOString());
+  if (has('deleted')) set('削除', it.deleted ? true : false);
+
+  return out;
 }
 
 /** 購入履歴は追記専用。同一(itemId, at)は重複送信とみなしてスキップ。 */

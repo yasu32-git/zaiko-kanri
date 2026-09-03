@@ -3,7 +3,7 @@
  * アプリの外殻（HTML/CSS/JS）をキャッシュしてオフライン起動を可能にする。
  * データ本体は IndexedDB 側で保持するため、API通信はキャッシュしない。
  */
-const CACHE = 'stock-pwa-v1';
+const CACHE = 'stock-pwa-v2';
 
 const ASSETS = [
   './',
@@ -42,8 +42,11 @@ self.addEventListener('fetch', ev => {
 
   // ネットワーク優先。取得できたらキャッシュを更新し、失敗時のみキャッシュを返す。
   // （キャッシュ優先にすると、アプリを更新しても古いJSが配信され続けてしまう）
+  // cache: 'no-store' で、ブラウザのHTTPキャッシュ（GitHub Pagesのmax-age=600）も
+  // 迂回して必ずネットワークまで取りに行く。これが無いと、SWの仕組みとしては
+  // ネットワーク優先のつもりでも、裏でHTTPキャッシュから古い応答が返り続けることがある。
   ev.respondWith(
-    fetch(req)
+    fetch(req, { cache: 'no-store' })
       .then(res => {
         if (res && res.ok && new URL(req.url).origin === self.location.origin) {
           const copy = res.clone();

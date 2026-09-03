@@ -657,24 +657,37 @@ function bindUI() {
   onEnter('#buyForm', '#btnConfirmBuy');
   onEnter('#settingsForm', '#btnSaveSettings');
 
-  $('#btnSaveItem').onclick = async () => {
+  // スマホのタップは稀に同じボタンで複数のクリックイベントを起こすことがある（連打・タップの誤検知）。
+  // 保存系のボタンが多重に発火すると、2回目以降が閉じかけのダイアログや空のフォームを読んでしまい、
+  // 正しく入力した値を直後に空で上書きしてしまう恐れがあるため、処理中は無視するようにする。
+  const guardClick = (btnSel, fn) => {
+    const btn = $(btnSel);
+    let busy = false;
+    btn.onclick = async () => {
+      if (busy) return;
+      busy = true;
+      try { await fn(); } finally { busy = false; }
+    };
+  };
+
+  guardClick('#btnSaveItem', async () => {
     const form = $('#itemForm');
     if (!form.reportValidity()) return;
     const item = applyAutoListRules(readItemForm());
     if (!item.name) return;
     $('#itemDialog').close();
     await saveItem(item);
-  };
+  });
 
-  $('#btnDeleteItem').onclick = async () => {
+  guardClick('#btnDeleteItem', async () => {
     if (!editingItem) return;
     if (!confirm(`「${editingItem.name}」を削除しますか？`)) return;
     const target = editingItem;
     $('#itemDialog').close();
     await saveItem({ ...target, deleted: true, onList: false });
-  };
+  });
 
-  $('#btnConfirmBuy').onclick = async () => {
+  guardClick('#btnConfirmBuy', async () => {
     if (!buyingItem) return;
     const f = $('#buyForm').elements;
     const item = buyingItem;
@@ -683,9 +696,9 @@ function bindUI() {
     buyingItem = null;
     $('#buyDialog').close();
     await markPurchased(item, qty, store);
-  };
+  });
 
-  $('#btnSaveSettings').onclick = async () => {
+  guardClick('#btnSaveSettings', async () => {
     const f = $('#settingsForm').elements;
     state.apiUrl = f.apiUrl.value.trim();
     state.apiKey = f.apiKey.value.trim();
@@ -693,5 +706,5 @@ function bindUI() {
     await DB.setMeta('apiUrl', state.apiUrl);
     await DB.setMeta('apiKey', state.apiKey);
     sync();
-  };
+  });
 }

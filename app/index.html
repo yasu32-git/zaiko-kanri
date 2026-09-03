@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>在庫管理</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2f6f4e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="在庫">
+<link rel="apple-touch-icon" href="icons/icon-180.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-row">
+    <h1>在庫管理</h1>
+    <div class="topbar-actions">
+      <span id="syncBadge" class="badge" hidden>0</span>
+      <button id="btnSync" class="icon-btn" title="同期">⟳</button>
+      <button id="btnSettings" class="icon-btn" title="設定">⚙</button>
+    </div>
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab is-active" data-view="list">在庫一覧</button>
+    <button class="tab" data-view="shopping">買い物リスト</button>
+  </nav>
+
+  <div class="chips" id="storeChips"></div>
+  <div id="statusLine" class="status"></div>
+</header>
+
+<main>
+  <div id="listView"></div>
+</main>
+
+<button id="btnAdd" class="fab" title="品目を追加">＋</button>
+
+<!-- 品目の追加・編集 -->
+<dialog id="itemDialog">
+  <form method="dialog" id="itemForm">
+    <h2 id="itemDialogTitle">品目を追加</h2>
+
+    <label>品名<input name="name" required autocomplete="off"></label>
+    <label>カテゴリ<input name="category" list="categoryList" autocomplete="off"></label>
+    <datalist id="categoryList"></datalist>
+
+    <fieldset>
+      <legend>購入先（複数選択可）</legend>
+      <div id="storeChecks" class="store-checks"></div>
+      <input name="storeExtra" placeholder="その他（カンマ区切りで追加）" autocomplete="off">
+    </fieldset>
+
+    <div class="row">
+      <label>在庫数<input name="stock" type="number" inputmode="decimal" step="0.5" min="0" value="0"></label>
+      <label>単位<input name="unit" placeholder="個 / パック" autocomplete="off"></label>
+    </div>
+
+    <label>緊急度
+      <select name="urgency">
+        <option value="通常">通常</option>
+        <option value="急ぎ">急ぎ</option>
+        <option value="必須">必須（在庫ゼロ等）</option>
+      </select>
+    </label>
+
+    <label>購入期日（急ぎでないもの）<input name="dueDate" type="date"></label>
+    <label>メモ<input name="memo" autocomplete="off"></label>
+
+    <div class="dialog-actions">
+      <button type="button" id="btnDeleteItem" class="danger">削除</button>
+      <span class="spacer"></span>
+      <button type="button" data-close="itemDialog">キャンセル</button>
+      <button type="button" id="btnSaveItem" class="primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 購入済み（カートに入れた）ときの入力 -->
+<dialog id="buyDialog">
+  <form method="dialog" id="buyForm">
+    <h2 id="buyTitle">購入済みにする</h2>
+    <div class="row">
+      <label>購入数<input name="qty" type="number" inputmode="decimal" step="0.5" min="0" value="1"></label>
+      <label>購入先<select name="store"></select></label>
+    </div>
+    <p class="hint" id="buyHint"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" data-close="buyDialog">キャンセル</button>
+      <button type="button" id="btnConfirmBuy" class="primary">購入済み</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- 設定 -->
+<dialog id="settingsDialog">
+  <form method="dialog" id="settingsForm">
+    <h2>設定</h2>
+    <label>GAS ウェブアプリURL
+      <input name="apiUrl" type="url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off">
+    </label>
+    <label>APIキー（GAS側で設定した場合のみ）
+      <input name="apiKey" autocomplete="off">
+    </label>
+    <p class="hint" id="settingsHint"></p>
+    <div class="dialog-actions">
+      <span class="spacer"></span>
+      <button type="button" data-close="settingsDialog">キャンセル</button>
+      <button type="button" id="btnSaveSettings" class="primary">保存</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

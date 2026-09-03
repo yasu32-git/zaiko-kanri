@@ -188,12 +188,17 @@ async function addLog(log) {
 /**
  * 買い物リストへの自動追加ルール。すべての更新経路（保存・在庫増減・購入・手動チェック）で共通して使う。
  *
- * - 「不要」（在庫過多で購入不要）の品目は対象外にし、逆に強制的にリストから外す。
+ * - 在庫が目標在庫数の2倍以上ある品目は、緊急度を自動で「不要」にしてリストから外す（過剰在庫）。
+ * - 「不要」（上記の自動判定、または手動設定）の品目は対象外にし、強制的にリストから外す。
  * - 在庫が0の品目は、緊急度を「必須」にして自動でリスト入りさせる。
  * - 在庫が目標在庫数以下の品目は、自動でリスト入りさせる（緊急度はそのまま）。
  * - どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
  */
 function applyAutoListRules(item) {
+  if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock * 2) {
+    return { ...item, urgency: '不要', onList: false };
+  }
+
   if (item.urgency === '不要') return { ...item, onList: false };
 
   if (item.stock <= 0) {

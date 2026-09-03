@@ -275,7 +275,7 @@ function setupSheets() {
 
   // 入力補助: 緊急度のプルダウン
   var rule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(['通常', '急ぎ', '必須'], true).build();
+    .requireValueInList(['通常', '急ぎ', '必須', '不要'], true).build();
   items.getRange(2, ITEM_HEADERS.indexOf('緊急度') + 1, 1000, 1).setDataValidation(rule);
 
   items.setFrozenRows(1);

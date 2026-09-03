@@ -130,6 +130,7 @@ main { padding: 10px 12px; }
 }
 .card.urgent { border-left: 4px solid var(--danger); }
 .card.soon { border-left: 4px solid var(--warn); }
+.card.skip { opacity: 0.55; }
 
 .card-main { flex: 1; min-width: 0; }
 .card-name { font-size: 15px; font-weight: 600; }

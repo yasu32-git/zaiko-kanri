@@ -162,13 +162,25 @@ async function addLog(log) {
   await DB.enqueue('log', log);
 }
 
-/** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り */
+/**
+ * 「不要」（在庫過多で購入不要）の品目は自動リスト追加の対象外にし、逆に強制的にリストから外す。
+ * 目標在庫数が設定されていて在庫がそれを下回っていれば、自動で買い物リストに追加する。
+ * どちらにも該当しない場合は、呼び出し元が設定した onList をそのまま尊重する。
+ */
+function applyAutoListRules(item) {
+  if (item.urgency === '不要') return { ...item, onList: false };
+  if (item.targetStock != null && item.stock < item.targetStock) return { ...item, onList: true };
+  return item;
+}
+
+/** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り。目標在庫数を下回った場合も自動でリスト入り。 */
 async function changeStock(item, delta) {
-  const next = { ...item, stock: Math.max(0, item.stock + delta) };
-  if (next.stock === 0 && item.stock > 0) {
+  let next = { ...item, stock: Math.max(0, item.stock + delta) };
+  if (next.stock === 0 && item.stock > 0 && next.urgency !== '不要') {
     next.urgency = '必須';
     next.onList = true;
   }
+  next = applyAutoListRules(next);
   await saveItem(next);
 }
 
@@ -189,7 +201,8 @@ async function markPurchased(item, qty, store) {
     store: store || '',
     stockAfter
   });
-  await saveItem({ ...item, stock: stockAfter, onList: false, urgency: '通常', dueDate: '' });
+  const next = applyAutoListRules({ ...item, stock: stockAfter, onList: false, urgency: '通常', dueDate: '' });
+  await saveItem(next);
 }
 
 // ---------------------------------------------------------------- 消費ペース
@@ -271,7 +284,7 @@ function visibleItems() {
     .sort(sortItems);
 }
 
-const URGENCY_RANK = { '必須': 0, '急ぎ': 1, '通常': 2 };
+const URGENCY_RANK = { '必須': 0, '急ぎ': 1, '通常': 2, '不要': 3 };
 
 function sortItems(a, b) {
   const ua = URGENCY_RANK[a.urgency] ?? 2;
@@ -329,7 +342,11 @@ function groupTitle(text) {
 
 function cardShell(item) {
   const card = document.createElement('div');
-  card.className = 'card' + (item.urgency === '必須' ? ' urgent' : item.urgency === '急ぎ' ? ' soon' : '');
+  card.className = 'card' + (
+    item.urgency === '必須' ? ' urgent' :
+    item.urgency === '急ぎ' ? ' soon' :
+    item.urgency === '不要' ? ' skip' : ''
+  );
 
   const main = document.createElement('div');
   main.className = 'card-main';
@@ -345,7 +362,11 @@ function cardShell(item) {
   (item.stores || []).forEach(s => sub.appendChild(tag(s)));
 
   if (item.targetStock != null) {
-    sub.appendChild(tag(`目標${fmtNum(item.targetStock)}${item.unit || ''}`, 'target'));
+    const need = item.targetStock - item.stock;
+    const label = need > 0
+      ? `目標${fmtNum(item.targetStock)}${item.unit || ''}（あと${fmtNum(need)}補充）`
+      : `目標${fmtNum(item.targetStock)}${item.unit || ''}`;
+    sub.appendChild(tag(label, 'target'));
   }
 
   const due = dueLabel(item);
@@ -563,7 +584,7 @@ function bindUI() {
   $('#btnSaveItem').onclick = async () => {
     const form = $('#itemForm');
     if (!form.reportValidity()) return;
-    const item = readItemForm();
+    const item = applyAutoListRules(readItemForm());
     if (!item.name) return;
     $('#itemDialog').close();
     await saveItem(item);

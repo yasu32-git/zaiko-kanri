@@ -166,7 +166,7 @@ async function runAutoListCheck() {
 
   for (const item of targets) {
     const next = applyAutoListRules(item);
-    if (next.onList !== item.onList) {
+    if (next.onList !== item.onList || next.urgency !== item.urgency) {
       changed++;
       await saveItem(next, { immediateSync: false });
     }
@@ -186,24 +186,28 @@ async function addLog(log) {
 }
 
 /**
- * 「不要」（在庫過多で購入不要）の品目は自動リスト追加の対象外にし、逆に強制的にリストから外す。
- * 目標在庫数が設定されていて在庫がそれを下回っていれば、自動で買い物リストに追加する。
- * どちらにも該当しない場合は、呼び出し元が設定した onList をそのまま尊重する。
+ * 買い物リストへの自動追加ルール。すべての更新経路（保存・在庫増減・購入・手動チェック）で共通して使う。
+ *
+ * - 「不要」（在庫過多で購入不要）の品目は対象外にし、逆に強制的にリストから外す。
+ * - 在庫が0の品目は、緊急度を「必須」にして自動でリスト入りさせる。
+ * - 在庫が目標在庫数以下の品目は、自動でリスト入りさせる（緊急度はそのまま）。
+ * - どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
  */
 function applyAutoListRules(item) {
   if (item.urgency === '不要') return { ...item, onList: false };
-  if (item.targetStock != null && item.stock < item.targetStock) return { ...item, onList: true };
+
+  if (item.stock <= 0) {
+    return { ...item, onList: true, urgency: '必須' };
+  }
+  if (item.targetStock != null && item.stock <= item.targetStock) {
+    return { ...item, onList: true };
+  }
   return item;
 }
 
-/** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り。目標在庫数を下回った場合も自動でリスト入り。 */
+/** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り。目標在庫数以下になった場合も自動でリスト入り。 */
 async function changeStock(item, delta) {
-  let next = { ...item, stock: Math.max(0, item.stock + delta) };
-  if (next.stock === 0 && item.stock > 0 && next.urgency !== '不要') {
-    next.urgency = '必須';
-    next.onList = true;
-  }
-  next = applyAutoListRules(next);
+  const next = applyAutoListRules({ ...item, stock: Math.max(0, item.stock + delta) });
   await saveItem(next);
 }
 

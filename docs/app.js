@@ -275,14 +275,16 @@ async function addLog(log) {
 /**
  * 買い物リストへの自動追加ルール。すべての更新経路（保存・在庫増減・購入・手動チェック）で共通して使う。
  *
- * - 在庫が目標在庫数の2倍以上ある品目は、緊急度を自動で「不要」にしてリストから外す（過剰在庫）。
- * - 「不要」（上記の自動判定、または手動設定）の品目は対象外にし、強制的にリストから外す。
- * - 在庫が0の品目は、緊急度を「必須」にして自動でリスト入りさせる。
- * - 在庫が目標在庫数以下の品目は、自動でリスト入りさせる（緊急度はそのまま）。
- * - どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
+ * 目標在庫数が設定されている品目は、在庫数によって以下の3状態に一意に分かれる（重複・抜けなし）。
+ *   在庫 >= 目標 … 「不要」にしてリストから外す（十分足りている）
+ *   0 < 在庫 < 目標 … 自動でリスト入りさせる（緊急度はそのまま）
+ *   在庫 <= 0 … 「必須」にして自動でリスト入りさせる
+ * 目標在庫数が未設定の品目は、在庫0の判定だけ行う（比較対象が無いため過不足は判定しない）。
+ * 「不要」（上記の自動判定、または手動設定）の品目はどの状態であってもリストから外す。
+ * どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
  */
 function applyAutoListRules(item) {
-  if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock * 2) {
+  if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock) {
     return { ...item, urgency: '不要', onList: false };
   }
 
@@ -625,6 +627,8 @@ function shoppingCard(item) {
   stats.appendChild(statBlock('在庫', fmtNum(item.stock) + (item.unit || '')));
   if (item.targetStock != null) {
     stats.appendChild(statBlock('目標', fmtNum(item.targetStock) + (item.unit || '')));
+    const need = item.targetStock - item.stock;
+    stats.appendChild(statBlock('不足', fmtNum(need > 0 ? need : 0) + (item.unit || '')));
   }
 
   const planStat = document.createElement('div');

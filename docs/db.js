@@ -6,9 +6,10 @@
  *   logs   — 購入履歴のローカルキャッシュ（keyPath: key = itemId|at）
  *   queue  — 未送信の更新キュー（autoIncrement）
  *   meta   — 設定値（APIのURL、最終同期時刻など）
+ *   images — 品目写真のサムネイルキャッシュ（keyPath: id = DriveのファイルID、value: { id, blob }）
  */
 const DB_NAME = 'stock-pwa';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let _db = null;
 
@@ -22,6 +23,7 @@ function openDB() {
       if (!db.objectStoreNames.contains('logs')) db.createObjectStore('logs', { keyPath: 'key' });
       if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'seq', autoIncrement: true });
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'k' });
+      if (!db.objectStoreNames.contains('images')) db.createObjectStore('images', { keyPath: 'id' });
     };
     req.onsuccess = () => { _db = req.result; resolve(_db); };
     req.onerror = () => reject(req.error);

@@ -12,14 +12,68 @@ const state = {
   apiKey: '',
   syncing: false,
   ready: false,          // 起動後、最初の同期が完了したか（古いキャッシュのまま編集させないためのガード）
-  clockOffsetMs: 0        // サーバー時刻 - この端末の時計、のズレ。複数端末間の時計のズレによる
+  clockOffsetMs: 0,       // サーバー時刻 - この端末の時計、のズレ。複数端末間の時計のズレによる
                            // Last-Write-Winsの誤判定（新しい編集が古いと誤認されて棄却される）を防ぐための補正値
+  imageUrls: new Map()    // 画像ID(DriveのファイルID) -> 表示用URL。ローカルキャッシュがあれば objectURL、
+                           // 無ければDriveのサムネイルURLを都度使う（imgSrcFor参照）
 };
 
 const $ = sel => document.querySelector(sel);
 const nowIso = () => new Date(Date.now() + state.clockOffsetMs).toISOString();
 const newId = () => 'itm_' + Date.now() + '_' + Math.random().toString(36).slice(2, 5);
 const fmtNum = n => (Math.round(n * 10) / 10).toString();
+
+// ---------------------------------------------------------------- 画像
+
+const IMAGE_MAX_DIM = 240;      // サムネイルの長辺の最大px。これ以上は保存しない＝常に軽い
+const IMAGE_QUALITY = 0.7;      // JPEG圧縮率
+
+/** Driveのサムネイル配信URL（誰でもリンクを知っていれば閲覧可能な設定で保存している） */
+function driveThumbUrl(fileId, size = 160) {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w${size}`;
+}
+
+/** 品目の写真の表示用URL。ローカルにキャッシュ済みならそれを優先し、無ければDriveから直接取得する。 */
+function imgSrcFor(item) {
+  if (!item.imageId) return null;
+  return state.imageUrls.get(item.imageId) || driveThumbUrl(item.imageId);
+}
+
+/** 選択された画像ファイルを、長辺 IMAGE_MAX_DIM px 以内のJPEGサムネイルに縮小する。 */
+function resizeImageFile(file, maxDim = IMAGE_MAX_DIM, quality = IMAGE_QUALITY) {
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      let { width, height } = img;
+      if (width > maxDim || height > maxDim) {
+        if (width >= height) { height = Math.round(height * maxDim / width); width = maxDim; }
+        else { width = Math.round(width * maxDim / height); height = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('画像の変換に失敗しました')),
+        'image/jpeg',
+        quality
+      );
+    };
+    img.onerror = () => { URL.revokeObjectURL(objectUrl); reject(new Error('画像を読み込めませんでした')); };
+    img.src = objectUrl;
+  });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error('画像の読み取りに失敗しました'));
+    reader.readAsDataURL(blob);
+  });
+}
 
 // ---------------------------------------------------------------- 起動
 
@@ -32,6 +86,11 @@ async function init() {
   state.items = await DB.getAll('items');
   state.logs = await DB.getAll('logs');
   state.stores = await DB.getMeta('stores', []);
+
+  // 画像はローカルにキャッシュしたBlobから objectURL を作っておく。
+  // 描画（render）は同期処理なので、表示のたびにIndexedDBへ問い合わせずに済むよう起動時にまとめて読む。
+  const images = await DB.getAll('images');
+  images.forEach(row => state.imageUrls.set(row.id, URL.createObjectURL(row.blob)));
 
   // 保存処理などは非同期なので、握り潰さずステータス行に出す
   window.addEventListener('unhandledrejection', ev => {
@@ -402,6 +461,13 @@ function groupTitle(text) {
   return d;
 }
 
+/**
+ * カードは上下2段構成にする。
+ * 上段（.card-top）: サムネイル＋品名・タグ。ここは折り返しても構わないので幅を優先する。
+ * 下段（.card-bottom）: ステッパーや操作ボタン。stockCard/shoppingCard が中身を追加する。
+ * サムネイルとボタン類を横1列に並べると、特に長い品名やステッパーの大型化と重なって
+ * 品名の表示幅が極端に狭くなってしまうため、2段に分けている。
+ */
 function cardShell(item) {
   const card = document.createElement('div');
   card.className = 'card' + (
@@ -409,6 +475,28 @@ function cardShell(item) {
     item.urgency === '急ぎ' ? ' soon' :
     item.urgency === '不要' ? ' skip' : ''
   );
+
+  const top = document.createElement('div');
+  top.className = 'card-top';
+
+  const thumbSrc = imgSrcFor(item);
+  if (thumbSrc) {
+    const thumb = document.createElement('img');
+    thumb.className = 'card-thumb';
+    thumb.src = thumbSrc;
+    thumb.alt = '';
+    thumb.loading = 'lazy';
+    thumb.decoding = 'async';
+    // Driveの共有設定変更やオフライン等で読み込めない場合は、崩れた画像アイコンのままにせず控えめなプレースホルダーに差し替える
+    thumb.onerror = () => {
+      const ph = document.createElement('span');
+      ph.className = 'card-thumb card-thumb-placeholder';
+      ph.textContent = '📦';
+      thumb.replaceWith(ph);
+    };
+    thumb.onclick = () => openItemDialog(item);
+    top.appendChild(thumb);
+  }
 
   const main = document.createElement('div');
   main.className = 'card-main';
@@ -440,7 +528,13 @@ function cardShell(item) {
   if (item.memo) sub.appendChild(tag(item.memo, 'pace'));
 
   main.appendChild(sub);
-  card.appendChild(main);
+  top.appendChild(main);
+  card.appendChild(top);
+
+  const bottom = document.createElement('div');
+  bottom.className = 'card-bottom';
+  card.appendChild(bottom);
+
   return card;
 }
 
@@ -454,6 +548,7 @@ function tag(text, cls = '') {
 /** 在庫一覧のカード: ステッパー ＋ リスト追加ボタン（1タップ） */
 function stockCard(item) {
   const card = cardShell(item);
+  const bottom = card.querySelector('.card-bottom');
 
   const stepper = document.createElement('div');
   stepper.className = 'stepper';
@@ -471,13 +566,13 @@ function stockCard(item) {
   plus.onclick = () => changeStock(item, +1);
 
   stepper.append(minus, val, plus);
-  card.appendChild(stepper);
+  bottom.appendChild(stepper);
 
   const btn = document.createElement('button');
   btn.className = 'act add' + (item.onList ? ' on' : '');
   btn.textContent = item.onList ? '追加済' : 'リスト';
   btn.onclick = () => toggleList(item);
-  card.appendChild(btn);
+  bottom.appendChild(btn);
 
   return card;
 }
@@ -485,17 +580,18 @@ function stockCard(item) {
 /** 買い物リストのカード: 購入済みボタン */
 function shoppingCard(item) {
   const card = cardShell(item);
+  const bottom = card.querySelector('.card-bottom');
 
   const stock = document.createElement('span');
   stock.className = 'val';
   stock.textContent = '在庫' + fmtNum(item.stock);
-  card.appendChild(stock);
+  bottom.appendChild(stock);
 
   const btn = document.createElement('button');
   btn.className = 'act buy';
   btn.textContent = '購入済み';
   btn.onclick = () => openBuyDialog(item);
-  card.appendChild(btn);
+  bottom.appendChild(btn);
 
   return card;
 }
@@ -520,16 +616,24 @@ function requireReady() {
 // ---------------------------------------------------------------- ダイアログ
 
 let editingItem = null;
+// 写真は選択直後にすぐ確定させず、保存ボタンを押したタイミングでアップロードする。
+// pendingPhotoBlob: 新しく選んだ（まだアップロードしていない）縮小済み画像
+// removePhotoRequested: 「×」で既存の写真を消すことを選んだか
+let pendingPhotoBlob = null;
+let removePhotoRequested = false;
 
 function openItemDialog(item) {
   if (!requireReady()) return;
   editingItem = item || null;
+  pendingPhotoBlob = null;
+  removePhotoRequested = false;
   const dlg = $('#itemDialog');
   // form.name はフォーム自身のname属性を指すため、必ず elements 経由で取る
   const f = $('#itemForm').elements;
 
   $('#itemDialogTitle').textContent = item ? '品目を編集' : '品目を追加';
   $('#btnDeleteItem').hidden = !item;
+  showPhotoPreview(item ? imgSrcFor(item) : null);
 
   f.name.value = item?.name || '';
   f.category.value = item?.category || '';
@@ -586,7 +690,8 @@ function readItemForm() {
     onList: editingItem?.onList || false,
     dueDate: f.dueDate.value || '',
     memo: f.memo.value.trim(),
-    deleted: false
+    deleted: false,
+    imageId: editingItem?.imageId ?? null // 写真自体の変更は保存ボタンのハンドラで別途反映する
   };
 }
 
@@ -618,6 +723,24 @@ function openBuyDialog(item) {
   $('#buyDialog').showModal();
 }
 
+/** 品目編集ダイアログの写真プレビュー表示を切り替える。url が null なら未設定表示に戻す。 */
+function showPhotoPreview(url) {
+  const img = $('#itemPhotoPreview');
+  const placeholder = $('#itemPhotoPlaceholder');
+  const removeBtn = $('#btnRemovePhoto');
+  if (url) {
+    img.src = url;
+    img.hidden = false;
+    placeholder.hidden = true;
+    removeBtn.hidden = false;
+  } else {
+    img.hidden = true;
+    img.removeAttribute('src');
+    placeholder.hidden = false;
+    removeBtn.hidden = true;
+  }
+}
+
 function openSettings() {
   const f = $('#settingsForm').elements;
   f.apiUrl.value = state.apiUrl;
@@ -641,6 +764,34 @@ function bindUI() {
   $('#btnAutoCheck').onclick = () => runAutoListCheck();
   $('#btnSettings').onclick = () => openSettings();
   $('#btnAdd').onclick = () => openItemDialog(null);
+
+  $('#photoBox').onclick = () => $('#itemPhotoInput').click();
+  $('#photoBox').onkeydown = ev => {
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); $('#itemPhotoInput').click(); }
+  };
+
+  $('#itemPhotoInput').addEventListener('change', async ev => {
+    const file = ev.target.files[0];
+    ev.target.value = ''; // 同じファイルを選び直せるようにする
+    if (!file) return;
+    try {
+      setStatus('写真を処理中…');
+      const blob = await resizeImageFile(file);
+      pendingPhotoBlob = blob;
+      removePhotoRequested = false;
+      showPhotoPreview(URL.createObjectURL(blob));
+      setStatus('');
+    } catch (e) {
+      setStatus('写真の処理に失敗しました: ' + e.message, true);
+    }
+  });
+
+  $('#btnRemovePhoto').onclick = ev => {
+    ev.stopPropagation();
+    pendingPhotoBlob = null;
+    removePhotoRequested = true;
+    showPhotoPreview(null);
+  };
 
   // ダイアログのボタンは type="button" ＋ 明示的なハンドラで処理する。
   // close イベントは非同期に発火するため、そこでフォームを読むと
@@ -675,8 +826,34 @@ function bindUI() {
     if (!form.reportValidity()) return;
     const item = applyAutoListRules(readItemForm());
     if (!item.name) return;
+
+    if (removePhotoRequested) {
+      item.imageId = null;
+    } else if (pendingPhotoBlob) {
+      // 写真のアップロードはネットワーク通信を伴うため、ここで待つ。
+      // 失敗した場合は品目自体の保存も中断し、「保存はされたが写真だけ消えた」状態を避ける。
+      if (!navigator.onLine) {
+        setStatus('オフライン中は写真を追加できません。オンライン復帰後にもう一度お試しください。', true);
+        return;
+      }
+      try {
+        setStatus('写真をアップロード中…');
+        const dataUrl = await blobToDataUrl(pendingPhotoBlob);
+        const oldFileId = editingItem?.imageId || null;
+        const res = await post('uploadImage', { itemId: item.id, dataUrl, oldFileId });
+        item.imageId = res.fileId;
+        state.imageUrls.set(res.fileId, URL.createObjectURL(pendingPhotoBlob));
+        await DB.put('images', { id: res.fileId, blob: pendingPhotoBlob });
+      } catch (e) {
+        setStatus('写真のアップロードに失敗しました: ' + e.message, true);
+        return;
+      }
+    }
+
     $('#itemDialog').close();
     await saveItem(item);
+    pendingPhotoBlob = null;
+    removePhotoRequested = false;
   });
 
   guardClick('#btnDeleteItem', async () => {

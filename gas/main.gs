@@ -17,10 +17,13 @@ var SHEET_STORES = '購入先マスタ';
 
 var ITEM_HEADERS = [
   'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位', '目標在庫数', '購入単位数',
-  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除'
+  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID'
 ];
 var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫'];
 var STORE_HEADERS = ['店名', '表示順'];
+
+// 品目の写真を保存するDriveフォルダ名。スプレッドシートと同じ場所（親フォルダ）に自動作成する。
+var IMAGE_FOLDER_NAME = '在庫管理_画像';
 
 // ---------------------------------------------------------------- エントリポイント
 
@@ -50,6 +53,7 @@ function doPost(e) {
       case 'upsertItems':   result = upsertItems(req.payload || []); break;
       case 'appendLogs':    result = appendLogs(req.payload || []); break;
       case 'sync':          result = syncBatch(req.payload || {}); break;
+      case 'uploadImage':   result = uploadImage(req.payload || {}); break;
       default: throw new Error('unknown action: ' + req.action);
     }
     return json({ ok: true, data: result });
@@ -99,7 +103,8 @@ function readItems() {
       dueDate: toDateStr(r['購入期日']),
       memo: String(r['メモ'] || ''),
       updatedAt: toIso(r['更新日時']),
-      deleted: toBool(r['削除'])
+      deleted: toBool(r['削除']),
+      imageId: emptyToNullStr(r['画像ID'])
     };
   }).filter(function (it) { return it.id && it.name; });
 }
@@ -227,6 +232,7 @@ function itemToRow(it, header, existingRow) {
   if (has('memo')) set('メモ', it.memo || '');
   set('更新日時', it.updatedAt || new Date().toISOString());
   if (has('deleted')) set('削除', it.deleted ? true : false);
+  if (has('imageId')) set('画像ID', it.imageId || '');
 
   return out;
 }
@@ -257,6 +263,49 @@ function syncBatch(payload) {
   if (payload.logs && payload.logs.length) res.logs = appendLogs(payload.logs);
   res.data = readAll();
   return res;
+}
+
+// ---------------------------------------------------------------- 画像
+
+/**
+ * 品目の写真をDriveに保存する。
+ * クライアント側で既にサムネイルサイズに縮小・圧縮した画像を dataURL (base64) で受け取り、
+ * スプレッドシートと同じ場所の「在庫管理_画像」フォルダに保存する。
+ * 誰でもリンクを知っていれば閲覧できる設定にする（PWA側から認証無しで<img>表示するため。
+ * GAS APIのアクセス設定自体が既に「全員」なので、セキュリティレベルはそれに合わせている）。
+ *
+ * payload: { itemId, dataUrl, oldFileId(任意) }
+ * 戻り値: { fileId }
+ */
+function uploadImage(payload) {
+  if (!payload || !payload.itemId || !payload.dataUrl) throw new Error('itemId と dataUrl が必要です');
+
+  var match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/.exec(payload.dataUrl);
+  if (!match) throw new Error('画像データの形式が不正です');
+  var mimeType = match[1];
+  var bytes = Utilities.base64Decode(match[2]);
+  var ext = mimeType.indexOf('png') >= 0 ? 'png' : 'jpg';
+  var blob = Utilities.newBlob(bytes, mimeType, payload.itemId + '_' + Date.now() + '.' + ext);
+
+  var folder = getOrCreateImageFolder();
+  var file = folder.createFile(blob);
+  file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+
+  // 差し替え時は古い画像をゴミ箱に移動して、フォルダにファイルが溜まり続けないようにする
+  if (payload.oldFileId) {
+    try { DriveApp.getFileById(payload.oldFileId).setTrashed(true); } catch (ignore) {}
+  }
+
+  return { fileId: file.getId() };
+}
+
+function getOrCreateImageFolder() {
+  var ssFile = DriveApp.getFileById(ss().getId());
+  var parents = ssFile.getParents();
+  var parent = parents.hasNext() ? parents.next() : DriveApp.getRootFolder();
+  var existing = parent.getFoldersByName(IMAGE_FOLDER_NAME);
+  if (existing.hasNext()) return existing.next();
+  return parent.createFolder(IMAGE_FOLDER_NAME);
 }
 
 // ---------------------------------------------------------------- 初期化
@@ -383,6 +432,12 @@ function emptyToNull(v) {
   if (v === '' || v === null || v === undefined) return null;
   var n = Number(v);
   return isNaN(n) ? null : n;
+}
+
+/** 文字列版。空文字・空白のみは null として扱う。 */
+function emptyToNullStr(v) {
+  var s = String(v || '').trim();
+  return s ? s : null;
 }
 
 function toBool(v) {

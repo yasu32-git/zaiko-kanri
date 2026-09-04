@@ -45,6 +45,14 @@
   <form method="dialog" id="itemForm">
     <h2 id="itemDialogTitle">品目を追加</h2>
 
+    <div class="field-label">写真</div>
+    <div class="photo-box" id="photoBox" tabindex="0" role="button" aria-label="写真を選択">
+      <img id="itemPhotoPreview" hidden alt="">
+      <span id="itemPhotoPlaceholder" class="photo-placeholder">📷</span>
+      <button type="button" id="btnRemovePhoto" class="photo-remove" hidden aria-label="写真を削除">×</button>
+    </div>
+    <input type="file" id="itemPhotoInput" accept="image/*" hidden>
+
     <label>品名<input name="name" required autocomplete="off"></label>
     <label>カテゴリ<input name="category" list="categoryList" autocomplete="off"></label>
     <datalist id="categoryList"></datalist>

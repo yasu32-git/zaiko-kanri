@@ -19,7 +19,7 @@ var ITEM_HEADERS = [
   'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位', '目標在庫数', '購入単位数',
   '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID', '購入予定数', '除外期限'
 ];
-var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫'];
+var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫', '単価'];
 var STORE_HEADERS = ['店名', '表示順'];
 
 // 品目の写真を保存するDriveフォルダ名。スプレッドシートと同じ場所（親フォルダ）に自動作成する。
@@ -120,7 +120,8 @@ function readLogs() {
       name: String(r['品名'] || ''),
       qty: numOrZero(r['購入数']),
       store: String(r['購入先'] || ''),
-      stockAfter: numOrZero(r['購入後在庫'])
+      stockAfter: numOrZero(r['購入後在庫']),
+      unitPrice: emptyToNull(r['単価'])
     };
   }).filter(function (l) { return l.itemId && l.at; });
 }
@@ -252,7 +253,10 @@ function appendLogs(logs) {
   logs.forEach(function (l) {
     if (!l || !l.itemId || !l.at) return;
     if (existing[l.itemId + '|' + l.at]) return;
-    rows.push([l.at, l.itemId, l.name || '', numOrZero(l.qty), l.store || '', numOrZero(l.stockAfter)]);
+    rows.push([
+      l.at, l.itemId, l.name || '', numOrZero(l.qty), l.store || '', numOrZero(l.stockAfter),
+      (l.unitPrice === null || l.unitPrice === undefined || l.unitPrice === '') ? '' : Number(l.unitPrice)
+    ]);
   });
   if (rows.length) {
     sh.getRange(sh.getLastRow() + 1, 1, rows.length, LOG_HEADERS.length).setValues(rows);
@@ -323,6 +327,7 @@ function setupSheets() {
   // 既存シートにコードが期待する列が無い場合、末尾に追加する（データは保持したまま）。
   // main.gs を更新した後にもう一度 setupSheets を実行すれば、この移行が自動で走る。
   ensureColumns(SHEET_ITEMS, ITEM_HEADERS);
+  ensureColumns(SHEET_LOG, LOG_HEADERS);
 
   if (stores.getLastRow() < 2) {
     stores.getRange(2, 1, 4, 2).setValues([

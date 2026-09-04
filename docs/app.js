@@ -359,7 +359,7 @@ async function changePlanQty(item, delta) {
 }
 
 /** 購入済み: リストから外し、在庫を加算し、履歴を記録。購入予定数は次回のために未設定へ戻す。 */
-async function markPurchased(item, qty, store) {
+async function markPurchased(item, qty, store, unitPrice) {
   const stockAfter = item.stock + qty;
   await addLog({
     at: nowIso(),
@@ -367,10 +367,19 @@ async function markPurchased(item, qty, store) {
     name: item.name,
     qty,
     store: store || '',
-    stockAfter
+    stockAfter,
+    unitPrice: unitPrice ?? null
   });
   const next = applyAutoListRules({ ...item, stock: stockAfter, onList: false, urgency: '通常', dueDate: '', planQty: null });
   await saveItem(next);
+}
+
+/** ある品目について、単価が記録された最新の購入履歴から前回単価を取得する（無ければ null） */
+function lastUnitPrice(itemId) {
+  const logs = state.logs
+    .filter(l => l.itemId === itemId && l.unitPrice != null)
+    .sort((a, b) => a.at.localeCompare(b.at));
+  return logs.length ? logs[logs.length - 1].unitPrice : null;
 }
 
 // ---------------------------------------------------------------- 消費ペース
@@ -846,10 +855,17 @@ function openBuyDialog(item) {
   });
   if (state.storeFilter && opts.includes(state.storeFilter)) sel.value = state.storeFilter;
 
+  // 前回単価があれば入力の手間を減らすため初期値に入れておく（金額が変わっていれば上書きしてもらう）
+  const price = lastUnitPrice(item.id);
+  f.unitPrice.value = price != null ? price : '';
+
   const pace = estimatePace(item.id);
-  $('#buyHint').textContent = pace
+  const hints = [];
+  hints.push(pace
     ? `推定消費ペース: 1日あたり約${fmtNum(pace)}${item.unit || ''}`
-    : '購入履歴が2回以上たまると消費ペースを表示します。';
+    : '購入履歴が2回以上たまると消費ペースを表示します。');
+  if (price != null) hints.push(`前回の単価: ¥${fmtNum(price)}`);
+  $('#buyHint').textContent = hints.join(' / ');
 
   $('#buyDialog').showModal();
 }
@@ -1001,9 +1017,10 @@ function bindUI() {
     const item = buyingItem;
     const qty = Number(f.qty.value) || 0;
     const store = f.store.value;
+    const unitPrice = f.unitPrice.value === '' ? null : Number(f.unitPrice.value);
     buyingItem = null;
     $('#buyDialog').close();
-    await markPurchased(item, qty, store);
+    await markPurchased(item, qty, store, unitPrice);
   });
 
   guardClick('#btnSaveSettings', async () => {

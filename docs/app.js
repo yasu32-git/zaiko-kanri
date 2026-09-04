@@ -311,7 +311,15 @@ async function toggleList(item) {
   await saveItem(next);
 }
 
-/** 購入済み: リストから外し、在庫を加算し、履歴を記録 */
+/** 買い物リストでの「購入予定数」を増減する。未設定なら購入単位数（無ければ1）を初期値とする。 */
+async function changePlanQty(item, delta) {
+  if (!requireReady()) return;
+  const current = item.planQty ?? item.defaultQty ?? 1;
+  const next = { ...item, planQty: Math.max(0, current + delta) };
+  await saveItem(next);
+}
+
+/** 購入済み: リストから外し、在庫を加算し、履歴を記録。購入予定数は次回のために未設定へ戻す。 */
 async function markPurchased(item, qty, store) {
   const stockAfter = item.stock + qty;
   await addLog({
@@ -322,7 +330,7 @@ async function markPurchased(item, qty, store) {
     store: store || '',
     stockAfter
   });
-  const next = applyAutoListRules({ ...item, stock: stockAfter, onList: false, urgency: '通常', dueDate: '' });
+  const next = applyAutoListRules({ ...item, stock: stockAfter, onList: false, urgency: '通常', dueDate: '', planQty: null });
   await saveItem(next);
 }
 
@@ -545,6 +553,20 @@ function tag(text, cls = '') {
   return s;
 }
 
+/** 買い物リストの「在庫 / 目標」のような、ラベル＋値の縦積み表示を作る */
+function statBlock(label, value) {
+  const box = document.createElement('div');
+  box.className = 'stat';
+  const l = document.createElement('span');
+  l.className = 'stat-label';
+  l.textContent = label;
+  const v = document.createElement('span');
+  v.className = 'stat-value';
+  v.textContent = value;
+  box.append(l, v);
+  return box;
+}
+
 /** 在庫一覧のカード: ステッパー ＋ リスト追加ボタン（1タップ） */
 function stockCard(item) {
   const card = cardShell(item);
@@ -582,10 +604,39 @@ function shoppingCard(item) {
   const card = cardShell(item);
   const bottom = card.querySelector('.card-bottom');
 
-  const stock = document.createElement('span');
-  stock.className = 'val';
-  stock.textContent = '在庫' + fmtNum(item.stock);
-  bottom.appendChild(stock);
+  const stats = document.createElement('div');
+  stats.className = 'shop-stats';
+  stats.appendChild(statBlock('在庫', fmtNum(item.stock) + (item.unit || '')));
+  if (item.targetStock != null) {
+    stats.appendChild(statBlock('目標', fmtNum(item.targetStock) + (item.unit || '')));
+  }
+
+  const planStat = document.createElement('div');
+  planStat.className = 'stat';
+  const planLabel = document.createElement('span');
+  planLabel.className = 'stat-label';
+  planLabel.textContent = '予定';
+  const planStepper = document.createElement('div');
+  planStepper.className = 'stepper sm';
+  const planQty = item.planQty ?? item.defaultQty ?? 1;
+
+  const minus = document.createElement('button');
+  minus.textContent = '−';
+  minus.onclick = () => changePlanQty(item, -1);
+
+  const val = document.createElement('span');
+  val.className = 'val';
+  val.textContent = fmtNum(planQty) + (item.unit || '');
+
+  const plus = document.createElement('button');
+  plus.textContent = '＋';
+  plus.onclick = () => changePlanQty(item, +1);
+
+  planStepper.append(minus, val, plus);
+  planStat.append(planLabel, planStepper);
+  stats.appendChild(planStat);
+
+  bottom.appendChild(stats);
 
   const btn = document.createElement('button');
   btn.className = 'act buy';
@@ -702,7 +753,8 @@ function openBuyDialog(item) {
   buyingItem = item;
   const f = $('#buyForm').elements;
   $('#buyTitle').textContent = item.name + ' を購入済みにする';
-  f.qty.value = item.defaultQty ?? 1;
+  // 買い物リストで設定した「購入予定数」があればそれを優先し、無ければ購入単位数（無ければ1）を使う
+  f.qty.value = item.planQty ?? item.defaultQty ?? 1;
 
   const sel = f.store;
   sel.innerHTML = '';

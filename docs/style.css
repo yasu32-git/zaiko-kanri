@@ -133,7 +133,12 @@ main { padding: 10px 12px; }
 .card.skip { opacity: 0.55; }
 
 .card-top { display: flex; align-items: center; gap: 10px; }
-.card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.card-bottom { display: flex; align-items: center; justify-content: space-between; gap: 10px 14px; flex-wrap: wrap; }
+
+.shop-stats { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.stat { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.stat-label { font-size: 10px; color: var(--muted); }
+.stat-value { font-size: 14px; font-weight: 700; }
 
 .card-thumb {
   width: 44px;
@@ -171,6 +176,9 @@ main { padding: 10px 12px; }
 }
 .stepper button:active { background: var(--accent-weak); border-color: var(--accent); }
 .stepper .val { min-width: 34px; text-align: center; font-size: 15px; font-weight: 700; }
+
+.stepper.sm button { width: 32px; height: 32px; font-size: 17px; border-radius: 8px; }
+.stepper.sm .val { min-width: 26px; font-size: 13px; }
 
 .act {
   border: none;

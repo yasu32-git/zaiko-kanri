@@ -17,7 +17,7 @@ var SHEET_STORES = '購入先マスタ';
 
 var ITEM_HEADERS = [
   'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位', '目標在庫数', '購入単位数',
-  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID'
+  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID', '購入予定数'
 ];
 var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫'];
 var STORE_HEADERS = ['店名', '表示順'];
@@ -98,6 +98,7 @@ function readItems() {
       unit: String(r['単位'] || ''),
       targetStock: emptyToNull(r['目標在庫数']),
       defaultQty: emptyToNull(r['購入単位数']),
+      planQty: emptyToNull(r['購入予定数']),
       urgency: String(r['緊急度'] || '通常'),
       onList: toBool(r['買い物リスト']),
       dueDate: toDateStr(r['購入期日']),
@@ -226,6 +227,7 @@ function itemToRow(it, header, existingRow) {
   if (has('unit')) set('単位', it.unit || '');
   if (has('targetStock')) set('目標在庫数', (it.targetStock === null || it.targetStock === '') ? '' : Number(it.targetStock));
   if (has('defaultQty')) set('購入単位数', (it.defaultQty === null || it.defaultQty === '') ? '' : Number(it.defaultQty));
+  if (has('planQty')) set('購入予定数', (it.planQty === null || it.planQty === '') ? '' : Number(it.planQty));
   if (has('urgency')) set('緊急度', it.urgency || '通常');
   if (has('onList')) set('買い物リスト', it.onList ? true : false);
   if (has('dueDate')) set('購入期日', it.dueDate || '');

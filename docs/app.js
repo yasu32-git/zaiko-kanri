@@ -272,11 +272,16 @@ async function addLog(log) {
   await DB.enqueue('log', log);
 }
 
+// 「不要」判定の余裕率。目標ちょうどで即座に不要にはせず、目標の20%増しまでは
+// 「十分だが不要とまでは言い切らない」バッファ状態として何もしない（自動では変更しない）。
+const OVERSTOCK_RATIO = 1.2;
+
 /**
  * 買い物リストへの自動追加ルール。すべての更新経路（保存・在庫増減・購入・手動チェック）で共通して使う。
  *
- * 目標在庫数が設定されている品目は、在庫数によって以下の3状態に一意に分かれる（重複・抜けなし）。
- *   在庫 >= 目標 … 「不要」にしてリストから外す（十分足りている）
+ * 目標在庫数が設定されている品目は、在庫数によって以下の状態に分かれる。
+ *   在庫 >= 目標×1.2 … 「不要」にしてリストから外す（十分すぎるほど足りている）
+ *   目標 <= 在庫 < 目標×1.2 … 余裕バッファ。自動では何もしない（現状を維持）
  *   0 < 在庫 < 目標 … 自動でリスト入りさせる（緊急度はそのまま）
  *   在庫 <= 0 … 「必須」にして自動でリスト入りさせる
  * 目標在庫数が未設定の品目は、在庫0の判定だけ行う（比較対象が無いため過不足は判定しない）。
@@ -284,7 +289,7 @@ async function addLog(log) {
  * どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
  */
 function applyAutoListRules(item) {
-  if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock) {
+  if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock * OVERSTOCK_RATIO) {
     return { ...item, urgency: '不要', onList: false };
   }
 
@@ -293,7 +298,7 @@ function applyAutoListRules(item) {
   if (item.stock <= 0) {
     return { ...item, onList: true, urgency: '必須' };
   }
-  if (item.targetStock != null && item.stock <= item.targetStock) {
+  if (item.targetStock != null && item.stock < item.targetStock) {
     return { ...item, onList: true };
   }
   return item;

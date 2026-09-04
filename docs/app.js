@@ -311,10 +311,10 @@ async function toggleList(item) {
   await saveItem(next);
 }
 
-/** 買い物リストでの「購入予定数」を増減する。未設定なら購入単位数（無ければ1）を初期値とする。 */
+/** 買い物リストでの「購入予定数」を増減する。未設定なら defaultPlanQty() を初期値とする。 */
 async function changePlanQty(item, delta) {
   if (!requireReady()) return;
-  const current = item.planQty ?? item.defaultQty ?? 1;
+  const current = item.planQty ?? defaultPlanQty(item);
   const next = { ...item, planQty: Math.max(0, current + delta) };
   await saveItem(next);
 }
@@ -373,6 +373,22 @@ function dueLabel(item) {
   if (days < 0) return `期日超過 ${-days}日`;
   if (days === 0) return '期日は今日';
   return `あと${days}日`;
+}
+
+/**
+ * 購入予定数の初期値を計算する。
+ * 購入単位数（デフォルト）が1、または未設定の場合は「1個ずつ買い足す」品目とみなし、
+ * 目標在庫数との不足数を初期値にする（目標未設定なら1）。
+ * 購入単位数が1以外（トイレットペーパー18ロール等、まとめ買いのロット数）の場合は、
+ * その数量をそのまま初期値として使う。
+ */
+function defaultPlanQty(item) {
+  if (item.defaultQty != null && item.defaultQty !== 1) return item.defaultQty;
+  if (item.targetStock != null) {
+    const need = item.targetStock - item.stock;
+    return need > 0 ? need : 1;
+  }
+  return item.defaultQty ?? 1;
 }
 
 // ---------------------------------------------------------------- 描画
@@ -618,7 +634,7 @@ function shoppingCard(item) {
   planLabel.textContent = '予定';
   const planStepper = document.createElement('div');
   planStepper.className = 'stepper sm';
-  const planQty = item.planQty ?? item.defaultQty ?? 1;
+  const planQty = item.planQty ?? defaultPlanQty(item);
 
   const minus = document.createElement('button');
   minus.textContent = '−';
@@ -753,8 +769,8 @@ function openBuyDialog(item) {
   buyingItem = item;
   const f = $('#buyForm').elements;
   $('#buyTitle').textContent = item.name + ' を購入済みにする';
-  // 買い物リストで設定した「購入予定数」があればそれを優先し、無ければ購入単位数（無ければ1）を使う
-  f.qty.value = item.planQty ?? item.defaultQty ?? 1;
+  // 買い物リストで設定した「購入予定数」があればそれを優先し、無ければ defaultPlanQty() を使う
+  f.qty.value = item.planQty ?? defaultPlanQty(item);
 
   const sel = f.store;
   sel.innerHTML = '';

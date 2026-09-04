@@ -163,6 +163,7 @@ main { padding: 10px 12px; }
 .tag.due { background: transparent; color: var(--warn); border: 1px solid var(--warn); }
 .tag.pace { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 .tag.target { background: transparent; color: var(--muted); border: 1px dashed var(--line); }
+.tag.excluded { background: transparent; color: var(--muted); border: 1px solid var(--line); }
 
 .stepper { display: flex; align-items: center; gap: 4px; }
 .stepper button {
@@ -191,6 +192,9 @@ main { padding: 10px 12px; }
 .act.add { background: var(--accent-weak); color: var(--accent); }
 .act.add.on { background: var(--accent); color: #fff; }
 .act.buy { background: var(--accent); color: #fff; }
+.act.exclude { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+
+.act-group { display: flex; align-items: center; gap: 8px; }
 
 .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 20px; }
 

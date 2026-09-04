@@ -17,7 +17,7 @@ var SHEET_STORES = '購入先マスタ';
 
 var ITEM_HEADERS = [
   'id', '品名', 'カテゴリ', '購入先', '在庫数', '単位', '目標在庫数', '購入単位数',
-  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID', '購入予定数'
+  '緊急度', '買い物リスト', '購入期日', 'メモ', '更新日時', '削除', '画像ID', '購入予定数', '除外期限'
 ];
 var LOG_HEADERS = ['日時', '品目ID', '品名', '購入数', '購入先', '購入後在庫'];
 var STORE_HEADERS = ['店名', '表示順'];
@@ -105,7 +105,8 @@ function readItems() {
       memo: String(r['メモ'] || ''),
       updatedAt: toIso(r['更新日時']),
       deleted: toBool(r['削除']),
-      imageId: emptyToNullStr(r['画像ID'])
+      imageId: emptyToNullStr(r['画像ID']),
+      excludedUntil: emptyToNullStr(toDateStr(r['除外期限']))
     };
   }).filter(function (it) { return it.id && it.name; });
 }
@@ -235,6 +236,7 @@ function itemToRow(it, header, existingRow) {
   set('更新日時', it.updatedAt || new Date().toISOString());
   if (has('deleted')) set('削除', it.deleted ? true : false);
   if (has('imageId')) set('画像ID', it.imageId || '');
+  if (has('excludedUntil')) set('除外期限', it.excludedUntil || '');
 
   return out;
 }

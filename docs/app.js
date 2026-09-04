@@ -276,10 +276,23 @@ async function addLog(log) {
 // 「十分だが不要とまでは言い切らない」バッファ状態として何もしない（自動では変更しない）。
 const OVERSTOCK_RATIO = 1.2;
 
+// 「リストから除外」ボタンを押してから、自動で買い物リストに再登場するまでの日数。
+// 将来的に品目ごとの消費ペース（購入履歴の周期）が十分に溜まったら、
+// 固定の14日ではなく実際の周期に応じた日数に変えることも検討している。
+const EXCLUDE_DAYS = 14;
+
+/** 端末の時計をサーバー時刻で補正した「今日」の日付文字列（YYYY-MM-DD）。 */
+function todayDateStr() {
+  return new Date(Date.now() + state.clockOffsetMs).toISOString().slice(0, 10);
+}
+
 /**
  * 買い物リストへの自動追加ルール。すべての更新経路（保存・在庫増減・購入・手動チェック）で共通して使う。
  *
- * 目標在庫数が設定されている品目は、在庫数によって以下の状態に分かれる。
+ * 「リストから除外」した品目は、除外期限（除外した日から14日後）を過ぎるまで、
+ * 在庫がどれだけ減っていても自動では一切リストに追加しない（最優先で判定する）。
+ *
+ * それ以外の品目は、目標在庫数が設定されていれば在庫数によって以下の状態に分かれる。
  *   在庫 >= 目標×1.2 … 「不要」にしてリストから外す（十分すぎるほど足りている）
  *   目標 <= 在庫 < 目標×1.2 … 余裕バッファ。自動では何もしない（現状を維持）
  *   0 < 在庫 < 目標 … 自動でリスト入りさせる（緊急度はそのまま）
@@ -289,6 +302,10 @@ const OVERSTOCK_RATIO = 1.2;
  * どれにも該当しない場合は、呼び出し元が設定した onList / urgency をそのまま尊重する。
  */
 function applyAutoListRules(item) {
+  if (item.excludedUntil && item.excludedUntil >= todayDateStr()) {
+    return { ...item, onList: false };
+  }
+
   if (item.targetStock != null && item.targetStock > 0 && item.stock >= item.targetStock * OVERSTOCK_RATIO) {
     return { ...item, urgency: '不要', onList: false };
   }
@@ -304,6 +321,14 @@ function applyAutoListRules(item) {
   return item;
 }
 
+/** 買い物リストから今すぐ外し、EXCLUDE_DAYS 日間は自動で再登場しないようにする。 */
+async function excludeFromList(item) {
+  if (!requireReady()) return;
+  const until = new Date(Date.now() + state.clockOffsetMs + EXCLUDE_DAYS * 86400000);
+  const next = { ...item, onList: false, excludedUntil: until.toISOString().slice(0, 10) };
+  await saveItem(next);
+}
+
 /** 在庫を増減。0になったら自動で「必須」＋買い物リスト入り。目標在庫数以下になった場合も自動でリスト入り。 */
 async function changeStock(item, delta) {
   if (!requireReady()) return;
@@ -315,6 +340,8 @@ async function toggleList(item) {
   if (!requireReady()) return;
   const next = { ...item, onList: !item.onList };
   if (!next.onList && next.urgency === '必須' && next.stock > 0) next.urgency = '通常';
+  // 手動でリストに戻す操作は「もう除外しなくていい」という意思表示とみなし、除外期限を解除する
+  if (next.onList) next.excludedUntil = null;
   await saveItem(next);
 }
 
@@ -380,6 +407,13 @@ function dueLabel(item) {
   if (days < 0) return `期日超過 ${-days}日`;
   if (days === 0) return '期日は今日';
   return `あと${days}日`;
+}
+
+/** 「リストから除外」中の品目に、あと何日で自動追加が再開するかを表示する */
+function excludedLabel(item) {
+  if (!item.excludedUntil || item.excludedUntil < todayDateStr()) return '';
+  const days = Math.ceil((new Date(item.excludedUntil + 'T23:59:59') - Date.now()) / 86400000);
+  return days > 0 ? `🚫非表示あと${days}日` : '🚫非表示は今日まで';
 }
 
 /**
@@ -553,6 +587,9 @@ function cardShell(item) {
   const due = dueLabel(item);
   if (due) sub.appendChild(tag(due, 'due'));
 
+  const excluded = excludedLabel(item);
+  if (excluded) sub.appendChild(tag(excluded, 'excluded'));
+
   const pace = paceLabel(item);
   if (pace) sub.appendChild(tag(pace, 'pace'));
 
@@ -663,11 +700,23 @@ function shoppingCard(item) {
 
   bottom.appendChild(stats);
 
+  const actions = document.createElement('div');
+  actions.className = 'act-group';
+
+  const excludeBtn = document.createElement('button');
+  excludeBtn.className = 'act exclude';
+  excludeBtn.textContent = 'リストから除外';
+  excludeBtn.title = `${EXCLUDE_DAYS}日間、自動でリストに追加しないようにする`;
+  excludeBtn.onclick = () => excludeFromList(item);
+  actions.appendChild(excludeBtn);
+
   const btn = document.createElement('button');
   btn.className = 'act buy';
   btn.textContent = '購入済み';
   btn.onclick = () => openBuyDialog(item);
-  bottom.appendChild(btn);
+  actions.appendChild(btn);
+
+  bottom.appendChild(actions);
 
   return card;
 }

@@ -104,6 +104,21 @@ body {
 }
 .chip.is-active { background: var(--accent-weak); border-color: var(--accent); color: var(--accent); font-weight: 600; }
 
+.filters { padding: 0 12px; }
+
+.search {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 12px;
+  font-size: 16px; /* iOSのズーム防止 */
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--text);
+}
+.search::placeholder { color: var(--muted); }
+
 .status { font-size: 11px; color: var(--muted); margin-top: 6px; min-height: 14px; }
 .status.err { color: var(--danger); }
 

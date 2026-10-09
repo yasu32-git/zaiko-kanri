@@ -8,6 +8,8 @@ const state = {
   stores: [],
   view: 'list',          // 'list' | 'shopping'
   storeFilter: null,     // null = すべて
+  categoryFilter: null,  // null = すべて / '食品' / '日用品'
+  searchText: '',        // 品名・メモの検索文字列（空なら絞り込まない）
   apiUrl: '',
   apiKey: '',
   syncing: false,
@@ -449,8 +451,34 @@ function defaultPlanQty(item) {
 // ---------------------------------------------------------------- 描画
 
 function render() {
+  renderCategoryChips();
   renderChips();
   renderList();
+}
+
+// カテゴリの絞り込みボタン。品目のカテゴリ名と完全一致で絞り込む。
+// 「すべて」以外に増やしたいときは、ここに追加するだけでよい。
+const CATEGORY_FILTERS = ['食品', '日用品'];
+
+function renderCategoryChips() {
+  const box = $('#categoryChips');
+  box.innerHTML = '';
+  [['すべて', null], ...CATEGORY_FILTERS.map(c => [c, c])].forEach(([label, value]) => {
+    const b = document.createElement('button');
+    b.className = 'chip' + (state.categoryFilter === value ? ' is-active' : '');
+    b.textContent = label;
+    b.onclick = () => { state.categoryFilter = value; render(); };
+    box.appendChild(b);
+  });
+}
+
+/** 検索用の正規化。全角/半角・大文字/小文字の違いを吸収する（ひらがな/カタカナは区別する） */
+const normalizeText = s => String(s || '').normalize('NFKC').toLowerCase();
+
+function matchesSearch(item) {
+  const q = normalizeText(state.searchText).trim();
+  if (!q) return true;
+  return normalizeText(item.name).includes(q) || normalizeText(item.memo).includes(q);
 }
 
 function renderChips() {
@@ -481,8 +509,13 @@ function visibleItems() {
     .filter(i => !i.deleted)
     .filter(i => state.view !== 'shopping' || i.onList)
     .filter(i => !state.storeFilter || (i.stores || []).includes(state.storeFilter))
+    .filter(i => !state.categoryFilter || i.category === state.categoryFilter)
+    .filter(matchesSearch)
     .sort(sortItems);
 }
+
+/** 購入先・カテゴリ・検索のいずれかで絞り込み中か */
+const isFiltering = () => !!(state.storeFilter || state.categoryFilter || state.searchText.trim());
 
 const URGENCY_RANK = { '必須': 0, '急ぎ': 1, '通常': 2, '不要': 3 };
 
@@ -501,6 +534,7 @@ function renderList() {
 
   if (!items.length) {
     root.innerHTML = `<p class="empty">${
+      isFiltering() ? '条件に一致する品目がありません。' :
       state.view === 'shopping' ? '買い物リストは空です。' : '品目がありません。右下の＋から追加してください。'
     }</p>`;
     return;
@@ -905,6 +939,13 @@ function bindUI() {
     state.view = btn.dataset.view;
     [...$('#tabs').children].forEach(b => b.classList.toggle('is-active', b === btn));
     render();
+  });
+
+  // 検索ボックスは再描画の対象外（入力中の文字やIME変換を壊さないため）。
+  // 入力のたびに一覧だけを描き直す。
+  $('#searchBox').addEventListener('input', ev => {
+    state.searchText = ev.target.value;
+    renderList();
   });
 
   $('#btnSync').onclick = () => sync();

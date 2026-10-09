@@ -30,9 +30,17 @@
     <button class="tab" data-view="shopping">買い物リスト</button>
   </nav>
 
-  <div class="chips" id="storeChips"></div>
   <div id="statusLine" class="status"></div>
 </header>
+
+<!-- 絞り込み（カテゴリ・検索・購入先）。件数が増えるとヘッダーが画面を占有してしまうため、
+     固定表示はせず一覧と一緒にスクロールさせる -->
+<section class="filters">
+  <div class="chips" id="categoryChips"></div>
+  <input id="searchBox" class="search" type="search" placeholder="品名・メモで検索"
+         autocomplete="off" autocapitalize="off" enterkeyhint="search">
+  <div class="chips" id="storeChips"></div>
+</section>
 
 <main>
   <div id="listView"></div>
